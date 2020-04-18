@@ -11,7 +11,6 @@ public class BaseEvent {
 
     @SerializedName("update-type")
     public void setUpdateType(String updateType) {
-        System.out.println(updateType);
         this.eventType = EventType.valueOf(updateType);
     }
 }

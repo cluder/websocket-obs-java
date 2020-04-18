@@ -4,6 +4,8 @@ import net.twasi.obsremotejava.requests.ResponseBase;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.ConnectException;
 import java.net.URI;
@@ -12,6 +14,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public class OBSRemoteController {
+	private static final Logger log = LoggerFactory.getLogger(OBSRemoteController.class);
+	
     private String address;
     private OBSCommunicator communicator;
     private WebSocketClient client;
@@ -28,14 +32,14 @@ public class OBSRemoteController {
             URI uri = new URI(address);
             ClientUpgradeRequest request = new ClientUpgradeRequest();
             Future<Session> connection = client.connect(communicator, uri, request);
-            System.out.printf("Connecting to: %s%s%n", uri, (password != null ? " with password" : ""));
+            log.info("Connecting to: {}{}", uri, (password != null ? " with password" : ""));
 
             try {
                 connection.get();
                 failed = false;
             } catch (ExecutionException e) {
                 if (e.getCause() instanceof ConnectException) {
-                    System.out.println("Connection to OBS failed.");
+                	log.error("Connection to OBS failed.");
                     failed = true;
                 }
             }
@@ -136,7 +140,7 @@ public class OBSRemoteController {
             @Override
             public void run(ResponseBase response) {
                 if (!response.getStatus().equals("ok")) {
-                    System.out.println("Failed to change transition. Pls fix.");
+                	log.error("Failed to change transition. Pls fix.");
                 }
                 communicator.setCurrentScene(scene, callback);
             }

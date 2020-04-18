@@ -76,6 +76,8 @@ import org.eclipse.jetty.websocket.api.annotations.OnWebSocketClose;
 import org.eclipse.jetty.websocket.api.annotations.OnWebSocketConnect;
 import org.eclipse.jetty.websocket.api.annotations.OnWebSocketMessage;
 import org.eclipse.jetty.websocket.api.annotations.WebSocket;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -89,6 +91,8 @@ import java.util.concurrent.TimeUnit;
 
 @WebSocket(maxTextMessageSize = 64 * 1024, maxIdleTime = 360000000)
 public class OBSCommunicator {
+	private static final Logger log = LoggerFactory.getLogger(OBSCommunicator.class);
+	
     private boolean debug;
     private final String password;
     private final CountDownLatch closeLatch;
@@ -134,7 +138,7 @@ public class OBSCommunicator {
 
     @OnWebSocketClose
     public void onClose(int statusCode, String reason) {
-        System.out.printf("Connection closed: %d - %s%n", statusCode, reason);
+        log.info("Connection closed: {} - {}", statusCode, reason);
         this.closeLatch.countDown(); // trigger latch
         this.onDisconnect.run(null);
     }
@@ -155,12 +159,12 @@ public class OBSCommunicator {
     public void onMessage(String msg) {
         try {
             if (msg == null) {
-                System.out.println("Ignored empty message");
+                log.info("Ignored empty message");
                 return;
             }
 
             if (debug) {
-                System.out.println(msg);
+                log.info(msg);
             }
 
             if (new Gson().fromJson(msg, JsonObject.class).has("message-id")) {
@@ -172,17 +176,18 @@ public class OBSCommunicator {
                 switch (type.getSimpleName()) {
                     case "GetVersionResponse":
                         versionInfo = (GetVersionResponse) responseBase;
-                        System.out.printf("Connected to OBS. Websocket Version: %s, Studio Version: %s\n", versionInfo.getObsWebsocketVersion(), versionInfo.getObsStudioVersion());
+                        log.info("Connected to OBS. Websocket Version: {}, Studio Version: {}\n", versionInfo.getObsWebsocketVersion(), versionInfo.getObsStudioVersion());
                         session.getRemote().sendStringByFuture(new Gson().toJson(new GetAuthRequiredRequest(this)));
                         break;
                     case "GetAuthRequiredResponse":
                         GetAuthRequiredResponse authRequiredResponse = (GetAuthRequiredResponse) responseBase;
                         if (authRequiredResponse.isAuthRequired()) {
-                            System.out.println("Authentication is required.");
+                            log.info("Authentication is required.");
                             authenticateWithServer(authRequiredResponse.getChallenge(), authRequiredResponse.getSalt());
                         } else {
-                            System.out.println("Authentication is not required. You're ready to go!");
-                            this.onConnect.run(versionInfo);
+                            log.info("Authentication is not required. You're ready to go!");
+                            if (this.onConnect != null)
+                            	this.onConnect.run(versionInfo);
                         }
                         break;
 
@@ -200,7 +205,7 @@ public class OBSCommunicator {
                         if (callbacks.containsKey(type)) {
                             callbacks.get(type).run(responseBase);
                         } else {
-                            System.out.println("Invalid type received: " + type.getName());
+                            log.info("Invalid type received: " + type.getName());
                         }
                 }
             } else {
@@ -253,13 +258,13 @@ public class OBSCommunicator {
                 }
             }
         } catch (Exception e) {
-            System.out.println("Websocket Exception: " + e.getMessage());
+            log.info("Websocket Exception: " + e.getMessage(), e);
         }
     }
 
     private void authenticateWithServer(String challenge, String salt) {
         if (password == null) {
-            System.err.println("Authentication required by server but no password set for client");
+            log.error("Authentication required by server but no password set for client");
             this.onConnectionFailed.run("Authentication required by server but no password set for client");
             return;
         }
@@ -268,7 +273,7 @@ public class OBSCommunicator {
         try {
             digest = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
-            System.err.println("Failed to perform password authentication with server");
+        	log.error("Failed to perform password authentication with server");
             e.printStackTrace();
             this.onConnectionFailed.run("Failed to perform password authentication with server");
             return;
@@ -350,14 +355,16 @@ public class OBSCommunicator {
 
     public void setSourceVisiblity(String scene, String source, boolean visibility, Callback callback) {
         SetSceneItemPropertiesRequest request = new SetSceneItemPropertiesRequest(this, scene, source, visibility);
-        System.out.println(new Gson().toJson(request));
+        if (log.isDebugEnabled())
+        	log.debug(new Gson().toJson(request));
         session.getRemote().sendStringByFuture(new Gson().toJson(request));
         callbacks.put(SetSceneItemPropertiesResponse.class, callback);
     }
 
     public void getSceneItemProperties(String scene, String source, Callback callback) {
         GetSceneItemPropertiesRequest request = new GetSceneItemPropertiesRequest(this, scene, source);
-        System.out.println(new Gson().toJson(request));
+        if (log.isDebugEnabled())
+        	log.debug(new Gson().toJson(request));
         session.getRemote().sendStringByFuture(new Gson().toJson(request));
         callbacks.put(SetSceneItemPropertiesResponse.class, callback);
     }
@@ -376,7 +383,8 @@ public class OBSCommunicator {
 
     public void getSourceSettings(String sourceName, Callback callback) {
         GetSourceSettingsRequest request = new GetSourceSettingsRequest(this, sourceName);
-        System.out.println(new Gson().toJson(request));
+        if (log.isDebugEnabled())
+        	log.debug(new Gson().toJson(request));
         session.getRemote().sendStringByFuture(new Gson().toJson(request));
         callbacks.put(GetSourceSettingsResponse.class, callback);
     }
